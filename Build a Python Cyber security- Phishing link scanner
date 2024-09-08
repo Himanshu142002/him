@@ -1,0 +1,112 @@
+#Build a Python Cyber security- Phishing link scanner
+
+import re
+from datetime import datetime
+
+import requests
+import tldextract
+import validators
+import whois
+
+# Blacklist of common phishing domains
+PHISHING_DOMAINS = [
+    "phishing-site.com",  # Add more known phishing domains here
+    "malicious.com"
+]
+
+# Keywords often found in phishing URLs
+PHISHING_KEYWORDS = ["login", "update", "verify", "secure", "account", "bank", "password"]
+
+# Shortened URL services (common in phishing attacks)
+SHORTENING_DOMAINS = ["bit.ly", "t.co", "goo.gl", "tinyurl.com", "ow.ly"]
+
+
+def is_valid_url(url):
+    """Validate the URL."""
+    return validators.url(url)
+
+
+def extract_domain(url):
+    """Extract domain from a URL."""
+    ext = tldextract.extract(url)
+    domain = f"{ext.domain}.{ext.suffix}"
+    return domain
+
+
+def check_blacklist(url):
+    """Check if the URL is in the blacklist."""
+    domain = extract_domain(url)
+    return domain in PHISHING_DOMAINS
+
+
+def check_phishing_keywords(url):
+    """Check for phishing-related keywords in the URL."""
+    for keyword in PHISHING_KEYWORDS:
+        if keyword.lower() in url.lower():
+            return True
+    return False
+
+
+def is_shortened_url(url):
+    """Check if the URL belongs to a known URL shortening service."""
+    domain = extract_domain(url)
+    return domain in SHORTENING_DOMAINS
+
+
+def check_domain_age(domain):
+    """Check the domain registration date via WHOIS."""
+    try:
+        w = whois.whois(domain)
+        creation_date = w.creation_date
+
+        if isinstance(creation_date, list):
+            creation_date = creation_date[0]
+
+        age_in_days = (datetime.now() - creation_date).days
+        return age_in_days
+    except:
+        return None  # If WHOIS lookup fails
+
+
+def scan_url(url):
+    """Phishing link scanner function."""
+    if not is_valid_url(url):
+        return {"error": "Invalid URL"}
+
+    report = {
+        "url": url,
+        "is_phishing": False,
+        "reason": []
+    }
+
+    domain = extract_domain(url)
+
+    # Check blacklist
+    if check_blacklist(url):
+        report["is_phishing"] = True
+        report["reason"].append("Blacklisted domain")
+
+    # Check phishing keywords
+    if check_phishing_keywords(url):
+        report["is_phishing"] = True
+        report["reason"].append("Phishing keywords found")
+
+    # Check for shortened URLs
+    if is_shortened_url(url):
+        report["is_phishing"] = True
+        report["reason"].append("URL shortening service detected")
+
+    # Check domain age
+    age_in_days = check_domain_age(domain)
+    if age_in_days is not None and age_in_days < 180:  # Less than 6 months old
+        report["is_phishing"] = True
+        report["reason"].append("Domain is newly registered")
+
+    return report
+
+
+# Command line input
+if __name__ == "__main__":
+    url = input("Enter a URL to scan for phishing: ").strip()  # Input command to get user input
+    result = scan_url(url)
+    print(result)
